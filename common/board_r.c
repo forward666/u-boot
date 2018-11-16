@@ -73,6 +73,8 @@ DECLARE_GLOBAL_DATA_PTR;
 extern int prom_init(void);
 #endif
 
+extern int nmxx_board_init(void);
+
 ulong monitor_flash_len;
 
 __weak int board_flash_wp_on(void)
@@ -730,6 +732,7 @@ static int run_main_loop(void)
 #ifdef CONFIG_SANDBOX
 	sandbox_main_loop_init();
 #endif
+
 	/* main_loop() can return to retry autoboot, if so just run it again */
 	for (;;)
 		main_loop();
@@ -826,6 +829,7 @@ static init_fnc_t init_sequence_r[] = {
 	arch_early_init_r,
 #endif
 	power_init_board,
+	nmxx_board_init,
 #ifdef CONFIG_MTD_NOR_FLASH
 	initr_flash,
 #endif

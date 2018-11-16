@@ -32,4 +32,9 @@ config RTC_PCF2127
 	  has a selectable I2C-bus or SPI-bus, a backup battery switch-over circuit, a
 	  programmable watchdog function, a timestamp function, and many other features.
 
+config RTC_PCF8563
+        bool "Enable PCF8563 driver"
+	depends on DM_RTC
+	help
+	  The PCF8563 is a RTC.
 endmenu

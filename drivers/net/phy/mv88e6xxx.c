@@ -17,6 +17,7 @@
 */
 
 #include "mv88e6xxx.h"
+#include <nmxx_common.h>
 /* If the switch's ADDR[4:0] strap pins are strapped to zero, it will
  * use all 32 SMI bus addresses on its SMI bus, and all switch registers
  * will be directly accessible on some {device address,register address}
@@ -26,9 +27,11 @@
  * registers.
  */
 
-static struct mv88e6xxx_dev soho_dev;
+static struct mv88e6xxx_dev soho_dev[2];
 static struct mv88e6xxx_dev *soho_dev_handle;
 static int REG_PORT_BASE = REG_PORT_BASE_LEGACY;
+
+DECLARE_GLOBAL_DATA_PTR;
 
 static int mv88e6xxx_reg_wait_ready(struct mv88e6xxx_dev *dev)
 {
@@ -250,7 +253,9 @@ void mv88e6xxx_display_switch_info(struct mv88e6xxx_dev *dev)
 		if (dev->cpu_port != -1)
 			printf("Cpu port  : %d\n", dev->cpu_port);
 	} else if (product_num == PORT_SWITCH_ID_PROD_NUM_6141 ||
-		   product_num == PORT_SWITCH_ID_PROD_NUM_6341) {
+		   	   product_num == PORT_SWITCH_ID_PROD_NUM_6341 ||
+			   product_num == PORT_SWITCH_ID_PROD_NUM_6172 ||
+			   product_num == PORT_SWITCH_ID_PROD_NUM_6176) {
 		printf("Switch    : SOHO\n");
 		printf("Series    : Topaz\n");
 		printf("Product # : %X\n", product_num);
@@ -307,14 +312,16 @@ int mv88e6xxx_get_switch_id(struct mv88e6xxx_dev *dev)
 		return id;
 
 	product_num = id >> 4;
-	if ((product_num == PORT_SWITCH_ID_PROD_NUM_6190) ||
-	    (product_num == PORT_SWITCH_ID_PROD_NUM_6290) ||
-	    (product_num == PORT_SWITCH_ID_PROD_NUM_6390)) {
+	if (product_num == PORT_SWITCH_ID_PROD_NUM_6190 ||
+	    product_num == PORT_SWITCH_ID_PROD_NUM_6290 ||
+	    product_num == PORT_SWITCH_ID_PROD_NUM_6390) {
 		/* Peridot switch port device address starts from 0 */
 		REG_PORT_BASE = REG_PORT_BASE_PERIDOT;
 		return id;
 	} else if (product_num == PORT_SWITCH_ID_PROD_NUM_6141 ||
-		   product_num == PORT_SWITCH_ID_PROD_NUM_6341) {
+		   	   product_num == PORT_SWITCH_ID_PROD_NUM_6341 ||
+		   	   product_num == PORT_SWITCH_ID_PROD_NUM_6172 ||
+			   product_num == PORT_SWITCH_ID_PROD_NUM_6176) {
 		/* Legacy switch port device address starts from 0x10 */
 		return id;
 	} else {
@@ -326,9 +333,11 @@ int mv88e6xxx_get_switch_id(struct mv88e6xxx_dev *dev)
 
 int mv88e6xxx_initialize(const void *blob)
 {
-	int node = 0;
-	int ret;
-	int port;
+	int i, node;
+	int ret, val;
+	int port, mask_port, switch_num = 0;
+	u16 reg;
+	char *s;
 
 	soho_dev_handle = NULL;
 
@@ -343,80 +352,163 @@ int mv88e6xxx_initialize(const void *blob)
 	if (ret == 0)
 		return -EACCES;
 
-	/* Initizalize Switch Device Structure */
-	soho_dev.phy_addr = fdtdec_get_uint(blob, node, "phy-addr", 0);
-	soho_dev.port_mask = fdtdec_get_int(blob, node, "port-mask", 0);
-	if (soho_dev.phy_addr == 0)
-		soho_dev.addr_mode = 0;  /* Single Addressing mode */
+	if ((gd->board_type == NM01) || (gd->board_type == NM04))
+		switch_num = 1;
+	else if (gd->board_type == NM02)
+		switch_num = 2;
 	else
-		soho_dev.addr_mode = 1;  /* Multi Addressing mode */
+		return -ENXIO;
+	
+	for (i = 0; i < switch_num; i++) {
+		/* Initizalize Switch Device Structure */
+		if (0 == i) 
+			soho_dev[i].phy_addr = fdtdec_get_uint(blob, node, "phy-addr", 0);
+		else
+			soho_dev[i].phy_addr = 0xA;
+		
+		soho_dev[i].port_mask = fdtdec_get_int(blob, node, "port-mask", 0);
+		if (gd->board_type == NM02)
+			soho_dev[i].sfp_port = fdtdec_get_int(blob, node, "sfp-port", -1);
+		else
+			soho_dev[i].sfp_port = -1;
+		
+		if (soho_dev[i].phy_addr == 0)
+			soho_dev[i].addr_mode = 0;  /* Single Addressing mode */
+		else
+			soho_dev[i].addr_mode = 1;  /* Multi Addressing mode */
 
-	soho_dev.id = mv88e6xxx_get_switch_id(&soho_dev);
+		soho_dev[i].id = mv88e6xxx_get_switch_id(&soho_dev[i]);
 
-	soho_dev.cpu_port = fdtdec_get_int(blob, node, "cpu-port", -1);
-	if (soho_dev.cpu_port != -1) {
-		u16 reg;
-
-		reg = mv88e6xxx_read_register(&soho_dev,
-					      REG_PORT(soho_dev.cpu_port),
-					      PORT_PCS_CTRL);
-		/* CPU port is forced link-up, duplex and 1GB speed */
-		reg &= ~PORT_PCS_CTRL_UNFORCED;
-		reg |= PORT_PCS_CTRL_FORCE_LINK |
-		       PORT_PCS_CTRL_LINK_UP |
-		       PORT_PCS_CTRL_DUPLEX_FULL |
-		       PORT_PCS_CTRL_FORCE_DUPLEX |
-		       PORT_PCS_CTRL_1000;
-		if ((soho_dev.id >> 4) == PORT_SWITCH_ID_PROD_NUM_6341) {
-			/* Configure RGMII Delay on cpu port */
-			reg |= PORT_PCS_CTRL_FORCE_SPEED |
-			       PORT_PCS_CTRL_RGMII_DELAY_TXCLK |
-			       PORT_PCS_CTRL_RGMII_DELAY_RXCLK;
+		soho_dev[i].cpu_port = fdtdec_get_int(blob, node, "cpu-port", -1);
+		if (soho_dev[i].cpu_port != -1) {
+			reg = mv88e6xxx_read_register(&soho_dev[i],
+						      REG_PORT(soho_dev[i].cpu_port),
+						      PORT_PCS_CTRL);
+			/* CPU port is forced link-up, duplex and 1GB speed */
+			reg &= ~PORT_PCS_CTRL_UNFORCED;
+			reg |= PORT_PCS_CTRL_FORCE_LINK |
+			       PORT_PCS_CTRL_LINK_UP |
+			       PORT_PCS_CTRL_DUPLEX_FULL |
+			       PORT_PCS_CTRL_FORCE_DUPLEX |
+			       PORT_PCS_CTRL_1000;
+			if ((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6341) {
+				/* Configure RGMII Delay on cpu port */
+				reg |= PORT_PCS_CTRL_FORCE_SPEED |
+				       PORT_PCS_CTRL_RGMII_DELAY_TXCLK |
+				       PORT_PCS_CTRL_RGMII_DELAY_RXCLK;
+			}else if(((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6172) ||
+					 ((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6176)) {
+				/* Configure RGMII Delay on cpu port */
+				reg |= PORT_PCS_CTRL_1000 |
+					   PORT_PCS_CTRL_RGMII_DELAY_TXCLK |
+					   PORT_PCS_CTRL_RGMII_DELAY_RXCLK;
+			}
+			ret = mv88e6xxx_write_register(&soho_dev[i],
+						       REG_PORT(soho_dev[i].cpu_port),
+						       PORT_PCS_CTRL, reg);
+			if (ret)
+				return ret;
 		}
-		ret = mv88e6xxx_write_register(&soho_dev,
-					       REG_PORT(soho_dev.cpu_port),
-					       PORT_PCS_CTRL, reg);
-		if (ret)
-			return ret;
+
+		/* Force port setup */
+		for (port = 0; port < sizeof(soho_dev[i].port_mask) * 8; port++) {
+			if (!(soho_dev[i].port_mask & BIT(port)))
+				continue;
+
+			/* Set port control register */
+			mv88e6xxx_write_register(&soho_dev[i],
+						 REG_PORT(port),
+						 PORT_CONTROL,
+						 PORT_CONTROL_STATE_FORWARDING |
+						 PORT_CONTROL_FORWARD_UNKNOWN |
+						 PORT_CONTROL_FORWARD_UNKNOWN_MC |
+						 PORT_CONTROL_USE_TAG |
+						 PORT_CONTROL_USE_IP |
+						 PORT_CONTROL_TAG_IF_BOTH);
+			/* Set port based vlan table */
+			mv88e6xxx_write_register(&soho_dev[i],
+						 REG_PORT(port),
+						 PORT_BASE_VLAN,
+						 soho_dev[i].port_mask & ~BIT(port));
+
+			if (port == soho_dev[i].cpu_port || port == soho_dev[i].sfp_port)
+				continue;
+
+			/* Set phy copper control for lan ports */
+			mv88e6xxx_write_phy_register(&soho_dev[i],
+						     port,
+						     0,
+						     PHY_COPPER_CONTROL,
+						     PHY_COPPER_CONTROL_SPEED_1G |
+						     PHY_COPPER_CONTROL_DUPLEX |
+						     PHY_COPPER_CONTROL_AUTO_NEG_EN);
+
+			/* set port 4 as sfp for nm02 */
+			if (gd->board_type == NM02) {
+				if (soho_dev[i].sfp_port != -1) {
+					reg = mv88e6xxx_read_register(&soho_dev[i],
+						      REG_PORT(soho_dev[i].sfp_port),
+						      PORT_PCS_CTRL);
+				
+					reg = mv88e6xxx_read_phy_register(&soho_dev[i],
+								      0xf, 1, 0);
+					reg &= ~ BIT(11);
+					ret = mv88e6xxx_write_phy_register(&soho_dev[i],
+								      0xf, 1, 0, reg);			   
+					if (ret)
+						return ret;
+				}
+			}
+		}
+
+		s = getenv("eth_mask");
+		if(s)
+			mask_port = (int)simple_strtol(s, NULL, 16);
+		else 
+			mask_port = 0x3FE;
+		
+		mask_port >>= i * 5;
+		/* Turn on phy power for mv6176 */
+		if(((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6172) || ((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6176)) {
+			for (port = 0; port < 5; port++) {
+				if (!(mask_port & (0x1 << port)))
+					continue;
+				if (port == soho_dev[i].sfp_port){
+					reg = mv88e6xxx_read_phy_register(&soho_dev[i], 0xf, 1, 0);
+					reg |= BIT(11);
+					ret = mv88e6xxx_write_phy_register(&soho_dev[i], 0xf, 1, 0, reg);			   
+					if (ret){
+						printf("Failed: Write - switch port: 0x%X, page: 0xf, reg: 0x0, val: 0x%X, ret: %d\n", port, reg, ret);
+						break;
+					}
+				}else{
+					ret = mv88e6xxx_read_phy_register(&soho_dev[i], port, 0, 0);
+					if (ret < 0){
+						printf("Failed: Read - switch port: 0x%X, page: 0x0, reg: 0x0, ret: %d\n", port, ret);
+						break;
+					}
+					ret |= PHY_COPPER_CONTROL_POWER_DOWN;
+					val = ret;
+					ret = mv88e6xxx_write_phy_register(&soho_dev[i], port, 0, 0,(unsigned short)val);
+					if (ret < 0){
+						printf("Failed: Write - switch port: 0x%X, page: 0x0, reg: 0x0, val: 0x%X, ret: %d\n", port, val, ret);
+						break;
+					}
+				}
+			}
+		}
 	}
 
-	/* Force port setup */
-	for (port = 0; port < sizeof(soho_dev.port_mask) * 8; port++) {
-		if (!(soho_dev.port_mask & BIT(port)))
-			continue;
-
-		/* Set port control register */
-		mv88e6xxx_write_register(&soho_dev,
-					 REG_PORT(port),
-					 PORT_CONTROL,
-					 PORT_CONTROL_STATE_FORWARDING |
-					 PORT_CONTROL_FORWARD_UNKNOWN |
-					 PORT_CONTROL_FORWARD_UNKNOWN_MC |
-					 PORT_CONTROL_USE_TAG |
-					 PORT_CONTROL_USE_IP |
-					 PORT_CONTROL_TAG_IF_BOTH);
-		/* Set port based vlan table */
-		mv88e6xxx_write_register(&soho_dev,
-					 REG_PORT(port),
-					 PORT_BASE_VLAN,
-					 soho_dev.port_mask & ~BIT(port));
-
-		if (port == soho_dev.cpu_port)
-			continue;
-
-		/* Set phy copper control for lan ports */
-		mv88e6xxx_write_phy_register(&soho_dev,
-					     REG_PORT(port),
-					     0,
-					     PHY_COPPER_CONTROL,
-					     PHY_COPPER_CONTROL_SPEED_1G |
-					     PHY_COPPER_CONTROL_DUPLEX |
-					     PHY_COPPER_CONTROL_AUTO_NEG_EN);
-	}
-
-	soho_dev_handle = &soho_dev;
+	soho_dev_handle = &soho_dev[0];
 
 	return 0;
+}
+
+struct mv88e6xxx_dev *mv88e6xxx_get_current_dev(int id)
+{
+	soho_dev_handle = &soho_dev[id];
+
+	return soho_dev_handle;
 }
 
 static int sw_resolve_options(char *str)
@@ -431,8 +523,12 @@ static int sw_resolve_options(char *str)
 		return SW_PHY_READ;
 	else if (strcmp(str, "phy_write") == 0)
 		return SW_PHY_WRITE;
+	else if (strcmp(str, "dev") == 0)
+		return SW_DEV;
 	else if (strcmp(str, "link") == 0)
 		return SW_LINK;
+	else if (strcmp(str, "force") == 0)
+		return SW_FORCE;
 	else
 		return SW_NA;
 }
@@ -440,7 +536,7 @@ static int sw_resolve_options(char *str)
 static int do_sw(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 {
 	struct mv88e6xxx_dev *dev;
-	int port, reg, page, val = 0, ret = 0;
+	int port, reg, page, val = 0, ret = 0, id;
 
 	dev = soho_dev_handle;
 
@@ -450,6 +546,24 @@ static int do_sw(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 	}
 
 	switch (sw_resolve_options(argv[1])) {
+	case SW_DEV:
+		if (argc != 3) {
+			printf("Syntax Error: switch dev <id>\n");
+			return 1;
+		}
+		id = (int)simple_strtoul(argv[2], NULL, 10);
+		if ((id == 0) || (id == 1))
+			dev = mv88e6xxx_get_current_dev(id);
+		else
+			printf("Param Error: id = 0 or 1\n");
+		break;
+	case SW_FORCE:
+		if (argc != 2) {
+			printf("Syntax Error: switch force\n");
+			return 1;
+		}
+		
+
 	case SW_INFO:
 		mv88e6xxx_display_switch_info(dev);
 		break;
@@ -495,7 +609,7 @@ static int do_sw(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		port = (int)simple_strtoul(argv[2], NULL, 16);
 		page = (int)simple_strtoul(argv[3], NULL, 16);
 		reg  = (int)simple_strtoul(argv[4], NULL, 16);
-		ret = mv88e6xxx_read_phy_register(dev, REG_PORT(port),
+		ret = mv88e6xxx_read_phy_register(dev, port,
 						  page, reg);
 		if (ret < 0)
 			printf("Failed: Read - switch port: 0x%X, page: 0x%X, reg: 0x%X\n, ret: %d",
@@ -514,7 +628,7 @@ static int do_sw(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		page = (int)simple_strtoul(argv[3], NULL, 16);
 		reg  = (int)simple_strtoul(argv[4], NULL, 16);
 		val  = (int)simple_strtoul(argv[5], NULL, 16);
-		ret = mv88e6xxx_write_phy_register(dev, REG_PORT(port),
+		ret = mv88e6xxx_write_phy_register(dev, port,
 						   page, reg,
 						   (unsigned short)val);
 		if (ret < 0)
@@ -546,8 +660,10 @@ static int do_sw(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 
 /***************************************************/
 U_BOOT_CMD(
-	switch,	6,	1,	do_sw,
+	switch,	7,	1,	do_sw,
 	"Switch Access commands",
+	"dev <id> - switch switch dev\n"
+	"force - enable all phy and sfp\n"
 	"switch info - Display switch information\n"
 	"switch read <port> <reg> - read switch register <reg> of a <port>\n"
 	"switch write <port> <reg> <val> - write <val> to switch register <reg> of a <port>\n"

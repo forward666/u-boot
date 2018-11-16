@@ -46,4 +46,11 @@
 #define CONFIG_CMD_PCI
 #endif
 
+/*
+*	X-speed nmxx board common configuration
+*/
+#define CONFIG_BOARD_TYPES
+#define CONFIG_FAT_WRITE
+#define CONFIG_CMD_DATE
+
 #endif /* _CONFIG_MVEBU_ARMADA_37XX_H */

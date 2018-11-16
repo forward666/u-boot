@@ -27,14 +27,14 @@
 					  115200, 230400, 460800, 921600 }
 
 /* Default Env vars */
-#define CONFIG_IPADDR			0.0.0.0	/* In order to cause an error */
-#define CONFIG_SERVERIP			0.0.0.0	/* In order to cause an error */
+#define CONFIG_IPADDR			192.168.1.10	/* In order to cause an error */
+#define CONFIG_SERVERIP			192.168.1.100	/* In order to cause an error */
 #define CONFIG_NETMASK			255.255.255.0
 #define CONFIG_GATEWAYIP		10.4.50.254
 #define CONFIG_HAS_ETH1
 #define CONFIG_HAS_ETH2
 #define CONFIG_ETHPRIME			"eth0"
-#define CONFIG_ROOTPATH                 "/srv/nfs/" /* Default Dir for NFS */
+/* #define CONFIG_ROOTPATH                 "/srv/nfs/"*/ /* Default Dir for NFS */
 
 #define CONFIG_ENV_OVERWRITE	/* ethaddr can be reprogrammed */
 /*
@@ -118,7 +118,7 @@
 #if defined(CONFIG_ENV_IS_IN_NAND) || defined(CONFIG_ENV_IS_IN_SPI_NAND)
 #define CONFIG_ENV_OFFSET		0x400000
 #else
-#define CONFIG_ENV_OFFSET		(0x400000 - CONFIG_ENV_SIZE)
+#define CONFIG_ENV_OFFSET		(0x200000 - CONFIG_ENV_SIZE)
 #endif
 #elif !defined(__ASSEMBLY__)
 int boot_from_nand(void);
@@ -203,47 +203,34 @@ int boot_from_nand(void);
 #include <config_distro_defaults.h>
 
 #define BOOT_TARGET_DEVICES(func) \
-	func(MMC, mmc, 1) \
-	func(MMC, mmc, 0) \
-	func(USB, usb, 0) \
-	func(SCSI, scsi, 0) \
-	func(PXE, pxe, na) \
-	func(DHCP, dhcp, na)
+	func(MMC, mmc, 1)
 
 #include <config_distro_bootcmd.h>
 
 #define CONFIG_EXTRA_ENV_SETTINGS		\
-	"ramdisk_name=-\0"			\
 	"fdt_name=fdt.dtb\0"			\
 	"image_name=Image\0"			\
-	"root=root=/dev/nfs rw\0"		\
-	"rootpath=/srv/nfs\0"			\
-	"extra_params=pci=pcie_bus_safe\0"	\
-	"get_ramdisk=if test \"${ramdisk_name}\" != \"-\"; then "	\
-		"tftpboot $ramdisk_addr_r $ramdisk_name; else "		\
-		"setenv ramdisk_addr_r -;fi\0"				\
-	"get_images=tftpboot $kernel_addr_r $image_name; "		\
-		"tftpboot $fdt_addr_r $fdt_name; run get_ramdisk\0"	\
-	"set_bootargs=setenv bootargs $console $root ip=$ipaddr:"	\
-		"$serverip:$gatewayip:$netmask:$hostname:$netdev:none "	\
-		"nfsroot=$serverip:$rootpath $extra_params $cpuidle\0"	\
-	"bootcmd_nfs=run get_images; run set_bootargs; "		\
-		"booti $kernel_addr_r $ramdisk_addr_r $fdt_addr_r\0"	\
-	"kernel_addr_r=0x7000000\0"		\
+	"bootdev0=root=/dev/mmcblk0p1 rw rootwait\0"			\
+	"bootdev1=root=/dev/mmcblk1p1 rw rootwait\0"			\
+	"boardtype=-\0"		\
+	"get_bootdev=if test \"${boardtype}\" = \"4\"; then setenv bootdev ${bootdev0}; "			\
+		"elif test \"${boardtype}\" = \"5\"; then setenv bootdev ${bootdev1}; "			\
+		"else setenv bootdev  ; "	\
+		"fi\0"		\
+	"extra_params=pci=pcie_bus_safe\0"				\
+	"get_images=tftpboot $kernel_addr $image_name; "		\
+		"tftpboot $fdt_addr $fdt_name;\0"	\
+	"set_bootargs=run get_bootdev;setenv bootargs $console $bootdev $extra_params $cpuidle\0"	\
+	"bootcmd_tftp=run get_images; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"kernel_addr=0x7000000\0"		\
 	"initrd_addr=0xa00000\0"		\
 	"initrd_size=0x2000000\0"		\
-	"fdt_addr_r=0x6f00000\0"		\
+	"fdt_addr=0x6f00000\0"		\
 	"loadaddr=0x7000000\0"			\
 	"fdt_high=0xffffffffffffffff\0"		\
-	"pxefile_addr_r=0x6e00000\0"		\
-	"scriptaddr=0x6d00000\0"		\
-	"hostname=marvell\0"			\
-	"ramdisk_addr_r=0xa000000\0"		\
 	"netdev=eth0\0"				\
 	"ethaddr=00:51:82:11:22:00\0"		\
-	"eth1addr=00:51:82:11:22:01\0"		\
-	"eth2addr=00:51:82:11:22:02\0"		\
-	"eth3addr=00:51:82:11:22:03\0"		\
 	"console=" CONFIG_DEFAULT_CONSOLE "\0"	\
 	BOOTENV
 

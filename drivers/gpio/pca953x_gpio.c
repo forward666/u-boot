@@ -289,8 +289,9 @@ static int pca953x_probe(struct udevice *dev)
 
 	ret = pca953x_read_regs(dev, PCA953X_OUTPUT, info->reg_output);
 	if (ret) {
-		dev_err(dev, "Error reading output register\n");
-		return ret;
+		//dev_err(dev, "Error reading output register\n");
+		//return ret;
+		return 0;
 	}
 
 	ret = pca953x_read_regs(dev, PCA953X_DIRECTION, info->reg_direction);

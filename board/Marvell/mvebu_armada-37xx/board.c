@@ -11,6 +11,13 @@
 #ifdef CONFIG_BOARD_CONFIG_EEPROM
 #include <mvebu/cfg_eeprom.h>
 #endif
+#include <asm-generic/gpio.h>
+#include <dt-bindings/gpio/armada-3700-gpio.h>
+#include <dm/device.h>
+#include <dm/lists.h>
+#include <dm/pinctrl.h>
+#include <dm/uclass.h>
+#include <nmxx_common.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -153,11 +160,280 @@ int board_usb3_vbus_init(void)
 	return 0;
 }
 
+static int get_board_type(void)
+{
+	int value = 0, ret;
+	unsigned int selector = 0, gpio[3];;
+	struct udevice *dev;
+	const struct pinctrl_ops *ops;
+
+	/* set jtag function as gpio mode */
+	ret = uclass_get_device(UCLASS_PINCTRL, 0, &dev);
+	if (ret) {
+		 printf("Cannot get armada-37xx-pinctrl udevice\n");
+		 return 0;
+	}
+	ops = pinctrl_get_ops(dev);
+	if (!ops) {
+		dev_dbg(dev, "ops is not set.  Do not bind.\n");
+		return 0;
+	}
+	ret = ops->pinmux_group_set(dev, selector, 1);
+	if(ret) {
+		printf("pinmux_group_set error\n");
+		return 0;
+	}
+	
+	mdelay(20);
+	
+	ret = gpio_lookup_name(VERCTL_0, NULL, NULL, &gpio[0]);
+	if (ret) {
+		printf("GPIO: '%s' not found\n", VERCTL_0);
+		return 0;
+	}
+	
+	ret = gpio_lookup_name(VERCTL_1, NULL, NULL, &gpio[1]);
+	if (ret) {
+		printf("GPIO: '%s' not found\n", VERCTL_1);
+		return 0;
+	}
+
+	ret = gpio_lookup_name(VERCTL_2, NULL, NULL, &gpio[2]);
+	if (ret) {
+		printf("GPIO: '%s' not found\n", VERCTL_2);
+		return 0;
+	}
+
+	gpio_free(gpio[0]);
+	gpio_free(gpio[1]);
+	gpio_free(gpio[2]);
+	
+	gpio_request(gpio[0], "verctl_0");
+	gpio_request(gpio[1], "verctl_1");
+	gpio_request(gpio[2], "verctl_2");
+	
+	gpio_direction_input(gpio[0]);
+	gpio_direction_input(gpio[1]);
+	gpio_direction_input(gpio[2]);
+	
+	mdelay(2);
+	
+	value += 1 * gpio_get_value(gpio[0]);
+	value += 2 * gpio_get_value(gpio[1]);
+	value += 4 * gpio_get_value(gpio[2]);
+
+	switch(value) {
+		case 0:
+			gd->board_type = NM01;
+			break;
+		case 1:
+			gd->board_type = NM02;
+			break;
+		case 2:
+			gd->board_type = NM03;
+			break;
+		case 3:
+			gd->board_type = NM04;
+			break;
+		case 7:
+			gd->board_type = NM05;
+			break;
+		case 6:
+			gd->board_type = NM06;
+			break;	
+		default:
+			gd->board_type = NMXX;
+			break;
+	}
+	
+	return 0;
+}
+
+static int gpio_reset_switch(void)
+{
+	unsigned int gpio;
+	int ret;
+	
+	if (gd->board_type == NM01 || gd->board_type == NM02 || gd->board_type == NM04) {
+		ret = gpio_lookup_name(PHY0_RESET_GPIO, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", PHY0_RESET_GPIO);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "phy0_rst");
+		gpio_direction_output(gpio, 0);
+		mdelay(20);
+		gpio_set_value(gpio, 1);
+	}
+
+	if (gd->board_type == NM02) {
+			ret = gpio_lookup_name(PHY1_RESET_GPIO, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", PHY1_RESET_GPIO);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "phy1_rst");
+			gpio_direction_output(gpio, 0);
+			mdelay(20);
+			gpio_set_value(gpio, 1);
+			
+			/* POE RESET */
+			ret = gpio_lookup_name(POE_RESET, NULL, NULL, &gpio);
+			if (ret)
+				printf("GPIO: '%s' not found\n", POE_RESET);
+			gpio_free(gpio);
+			gpio_request(gpio, "poe_rst");
+			gpio_direction_output(gpio, 0);
+			mdelay(20);
+			gpio_set_value(gpio, 1);
+			
+			/* sfp tx enable */
+			ret = gpio_lookup_name(I2C_IO_EXP_NUM4, NULL, NULL, &gpio);
+			if (ret)
+				printf("GPIO: '%s' not found\n", I2C_IO_EXP_NUM4);
+			gpio_free(gpio);
+			gpio_request(gpio, "sfp_tx0_enable");
+			gpio_direction_output(gpio, 1);
+			mdelay(10);
+			gpio_set_value(gpio, 0);
+
+			ret = gpio_lookup_name(I2C_IO_EXP_NUM5, NULL, NULL, &gpio);
+			if (ret)
+				printf("GPIO: '%s' not found\n", I2C_IO_EXP_NUM5);
+			gpio_free(gpio);
+			gpio_request(gpio, "sfp_tx1_enable");
+			gpio_direction_output(gpio, 1);
+			mdelay(10);
+			gpio_set_value(gpio, 0);
+	}
+
+	return 0;
+}
+
+static int init_sys_led(void)
+{
+	int ret;
+	unsigned int gpio;
+	
+	if (gd->board_type == NM01 || gd->board_type == NM02) {
+		ret = gpio_lookup_name(SYS_LED, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", SYS_LED);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "sys_led");
+		gpio_direction_output(gpio, 0);
+	}else if (gd->board_type == NM04) {
+		ret = gpio_lookup_name(WLED, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", WLED);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "lte_led");
+		gpio_direction_output(gpio, 0);
+
+		ret = gpio_lookup_name(SYS_LED, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", SYS_LED);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "alarm_led");
+		gpio_direction_output(gpio, 0);
+
+		ret = gpio_lookup_name(LTE_LED, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", LTE_LED);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "wifi_led");
+		gpio_direction_output(gpio, 0);
+
+		ret = gpio_lookup_name(PWM3_LED, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", PWM3_LED);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "lte_led");
+		gpio_direction_output(gpio, 0);
+	}
+	return 0;
+}
+
+static int init_other(void)
+{
+	int ret;
+	unsigned int gpio;
+
+	if (gd->board_type == NM04)
+	{
+		ret = gpio_lookup_name(LTE_POWER_CTL, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", LTE_POWER_CTL);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "lte_power_ctl");
+		gpio_direction_output(gpio, 1);
+		mdelay(100);
+		ret = gpio_lookup_name(LTE_RESET, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", LTE_RESET);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "lte_reset_gpio");
+		gpio_direction_output(gpio, 0);
+		mdelay(200);
+		gpio_set_value(gpio, 1);
+
+		ret = gpio_lookup_name(USB_POWER_CTL, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", USB_POWER_CTL);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "usb_power_ctl");
+		gpio_direction_output(gpio, 1);
+	}
+
+	/* init HSC32EU hardware reset gpio status as output and default value is 1 */
+	ret = gpio_lookup_name(HSC_RESET, NULL, NULL, &gpio);
+	if (ret) {
+		printf("GPIO: '%s' not found\n", HSC_RESET);
+		return 0;
+	}
+	gpio_free(gpio);
+	gpio_request(gpio, "hsc_reset");
+	gpio_direction_output(gpio, 0);
+	mdelay(20);
+	gpio_set_value(gpio, 1);
+
+	return 0;
+}
+
+
+int nmxx_board_init(void)
+{
+	get_board_type();
+	gpio_reset_switch();
+	init_sys_led();
+	init_other();
+
+	return 0;
+}
+
 int board_init(void)
 {
-	board_usb2_vbus_init();
+	/*board_usb2_vbus_init();
 
-	board_usb3_vbus_init();
+	board_usb3_vbus_init();*/
 
 	/* adress of boot parameters */
 	gd->bd->bi_boot_params = CONFIG_SYS_SDRAM_BASE + 0x100;
@@ -165,8 +441,11 @@ int board_init(void)
 	printf("U-Boot DT blob at : %p\n", gd->fdt_blob);
 #endif
 
+	/* init nmxx board configuration */
+	//nmxx_board_init();
+
 	/* enable serdes lane 2 mux for sata phy */
-	board_comphy_usb3_sata_mux(COMPHY_LANE2_MUX_SATA);
+	//board_comphy_usb3_sata_mux(COMPHY_LANE2_MUX_SATA);
 
 	return 0;
 }

@@ -81,6 +81,8 @@
 #define PORT_SWITCH_ID_PROD_NUM_6390	0x390
 #define PORT_SWITCH_ID_PROD_NUM_6141	0x141
 #define PORT_SWITCH_ID_PROD_NUM_6341	0x341
+#define PORT_SWITCH_ID_PROD_NUM_6172    0x172
+#define PORT_SWITCH_ID_PROD_NUM_6176    0x176
 
 #define PORT_CONTROL		0x04
 #define PORT_CONTROL_USE_CORE_TAG	BIT(15)
@@ -346,6 +348,7 @@ struct mv88e6xxx_dev {
 	unsigned int addr_mode;
 	int id;
 	int cpu_port;	/* The switch port to which the CPU is attached */
+	int sfp_port;
 };
 
 enum sw_opts {
@@ -355,5 +358,7 @@ enum sw_opts {
 	SW_PHY_READ,
 	SW_PHY_WRITE,
 	SW_LINK,
+	SW_DEV,
+	SW_FORCE,
 	SW_NA
 };
