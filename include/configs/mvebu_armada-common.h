@@ -21,8 +21,11 @@
 
 /* auto boot */
 #define CONFIG_PREBOOT
-
+#if defined (CONFIG_NMXX_DP)
 #define CONFIG_BAUDRATE			115200
+#else
+#define CONFIG_BAUDRATE			115200
+#endif
 #define CONFIG_SYS_BAUDRATE_TABLE	{ 9600, 19200, 38400, 57600, \
 					  115200, 230400, 460800, 921600 }
 
@@ -201,27 +204,51 @@ int boot_from_nand(void);
 #else /*CONFIG_MVEBU_PALLADIUM*/
 
 #include <config_distro_defaults.h>
-
+#if 0
 #define BOOT_TARGET_DEVICES(func) \
 	func(MMC, mmc, 1)
 
 #include <config_distro_bootcmd.h>
-
+#endif
+#if defined (CONFIG_NMXX_SXF)
 #define CONFIG_EXTRA_ENV_SETTINGS		\
-	"fdt_name=fdt.dtb\0"			\
-	"image_name=Image\0"			\
-	"bootdev0=root=/dev/mmcblk0p1 rw rootwait\0"			\
-	"bootdev1=root=/dev/mmcblk1p1 rw rootwait\0"			\
-	"boardtype=-\0"		\
-	"get_bootdev=if test \"${boardtype}\" = \"4\"; then setenv bootdev ${bootdev0}; "			\
-		"elif test \"${boardtype}\" = \"5\"; then setenv bootdev ${bootdev1}; "			\
+	"boot_prefixes=/boot/\0" \
+	"fdt_name=armada-3720-community.dtb\0"			\
+	"image_name=openwrt-armada-ESPRESSObin-Image\0"			\
+	"bootdev_normal=root=/dev/mmcblk0p2 rw rootwait\0"			\
+	"bootdev_recovery=root=/dev/mmcblk0p1 rw rootwait\0"			\
+	"boot_mode=normal\0"		\
+	"recovery_name=recovery.bin\0"				\
+	"rootfs_name=rootfs.bin\0"				\
+	"update_opt=tftpboot $loadaddr ${image_name_t}; if test $? = 0; then " \
+		"mmc dev 1; part start mmc 1 ${partition} pstart; part size mmc 1 ${partition} psize; mmc erase ${pstart} ${psize}; " \
+		"mmc write ${loadaddr} ${pstart} ${filesize}; if test $? != 0; then echo Update failed....;  " \
+		"else echo Update ${image_name_t} success^_^; fi; " \
+		"fi\0" \
+	"update_recovery=setenv partition 1; setenv image_name_t ${recovery_name}; run update_opt;\0" \
+	"update_rootfs=setenv partition 2; setenv image_name_t ${rootfs_name}; run update_opt; \0" \
+	"bootmenu_0=Boot system code via rootfs partition(default)=run bootcmd\0"		\
+	"bootmenu_1=Boot system code via recovery partition=run bootcmd_recovery\0"		\
+	"bootmenu_2=Load system code then write to rootfs partition via TFTP=run update_rootfs\0"		\
+	"bootmenu_3=Load system code then write to recovery partition via TFTP=run update_recovery\0"		\
+	"bootmenu_4=Show local ip and serverip=echo local ip(${ipaddr}) serverip(${serverip})\0"		\
+	"bootcmd_recovery=setenv boot_mode recovery; run bootcmd\0"		\
+	"get_images_mmc=mmc dev 1; ext4load mmc 1:1 $kernel_addr ${boot_prefixes}$image_name; "		\
+		"ext4load mmc 1:1 $fdt_addr ${boot_prefixes}$fdt_name;\0"	\
+	"get_bootdev=if test \"${boot_mode}\" = \"normal\"; then setenv bootdev ${bootdev_normal}; "			\
+		"elif test \"${boot_mode}\" = \"recovery\"; then setenv bootdev ${bootdev_recovery}; "			\
 		"else setenv bootdev  ; "	\
 		"fi\0"		\
-	"extra_params=pci=pcie_bus_safe\0"				\
-	"get_images=tftpboot $kernel_addr $image_name; "		\
+	"get_images_tftp=tftpboot $kernel_addr $image_name; "		\
 		"tftpboot $fdt_addr $fdt_name;\0"	\
-	"set_bootargs=run get_bootdev;setenv bootargs $console $bootdev $extra_params $cpuidle\0"	\
-	"bootcmd_tftp=run get_images; run set_bootargs; "		\
+	"get_images_usb=usb reset;fatload usb 0 $kernel_addr $image_name; "		\
+		"fatload usb 0 $fdt_addr $fdt_name;\0"	\
+	"set_bootargs=run get_bootdev;setenv bootargs $console $bootdev\0"	\
+	"bootcmd_tftp=run get_images_tftp; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"bootcmd_mmc=run get_images_mmc; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"bootcmd_usb=run get_images_usb; run set_bootargs; "		\
 		"booti $kernel_addr - $fdt_addr\0"	\
 	"kernel_addr=0x7000000\0"		\
 	"initrd_addr=0xa00000\0"		\
@@ -231,10 +258,76 @@ int boot_from_nand(void);
 	"fdt_high=0xffffffffffffffff\0"		\
 	"netdev=eth0\0"				\
 	"ethaddr=00:51:82:11:22:00\0"		\
-	"console=" CONFIG_DEFAULT_CONSOLE "\0"	\
-	BOOTENV
-
+	"console=" CONFIG_DEFAULT_CONSOLE "\0"
+#elif defined (CONFIG_NMXX_ALI)
+#define CONFIG_EXTRA_ENV_SETTINGS		\
+	"boot_prefixes=/boot/\0" \
+	"fdt_name=fdt.dtb\0"			\
+	"image_name=Image\0"			\
+	"bootdev_normal=root=/dev/mmcblk1p1 rw rootwait\0"			\
+	"bootdev_recovery=root=/dev/mmcblk1p3 rw rootwait\0"			\
+	"boot_mode=normal\0"		\
+	"partition=1\0"		\
+	"get_images_mmc=mmc dev 1; ext4load mmc 1:${partition} $kernel_addr ${boot_prefixes}$image_name; "		\
+		"ext4load mmc 1:${partition} $fdt_addr ${boot_prefixes}$fdt_name;\0"	\
+	"get_bootdev=if test \"${boot_mode}\" = \"normal\"; then setenv bootdev ${bootdev_normal}; setenv partition 1; "			\
+		"elif test \"${boot_mode}\" = \"recovery\"; then setenv bootdev ${bootdev_recovery}; setenv partition 3;"			\
+		"else setenv bootdev  ; setenv partition 1; "	\
+		"fi\0"		\
+	"get_images_tftp=tftpboot $kernel_addr $image_name; "		\
+		"tftpboot $fdt_addr $fdt_name;\0"	\
+	"get_images_usb=usb reset;fatload usb 0 $kernel_addr $image_name; "		\
+		"fatload usb 0 $fdt_addr $fdt_name;\0"	\
+	"set_bootargs=run get_bootdev;setenv bootargs $console $bootdev\0"	\
+	"bootcmd_tftp=run get_images_tftp; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"bootcmd_mmc=run get_bootdev; run get_images_mmc; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"bootcmd_usb=run get_images_usb; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"kernel_addr=0x7000000\0"		\
+	"initrd_addr=0xa00000\0"		\
+	"initrd_size=0x2000000\0"		\
+	"fdt_addr=0x6f00000\0"		\
+	"loadaddr=0x7000000\0"			\
+	"fdt_high=0xffffffffffffffff\0"		\
+	"netdev=eth0\0"				\
+	"ethaddr=00:51:82:11:22:00\0"		\
+	"console=" CONFIG_DEFAULT_CONSOLE "\0"
+#elif defined (CONFIG_NMXX_DP)
+#define CONFIG_EXTRA_ENV_SETTINGS		\
+	"boot_prefixes=/\0" \
+	"fdt_name=armada-3720-nmxx.dtb\0"			\
+	"image_name=Image\0"			\
+	"boot_mode=-\0"		\
+	"get_images_mmc=mmc dev 1; fatload mmc 1:1 $kernel_addr ${boot_prefixes}$image_name; " 	\
+		"fatload mmc 1:1 $fdt_addr ${boot_prefixes}$fdt_name;\0"	\
+	"get_bootdev=if test \"${boot_mode}\" = \"normal\"; then setenv bootdev ${bootdev_normal}; "			\
+		"elif test \"${boot_mode}\" = \"recovery\"; then setenv bootdev ${bootdev_recovery}; "			\
+		"else setenv bootdev  ; "	\
+		"fi\0"		\
+	"get_images_tftp=tftpboot $kernel_addr $image_name; "		\
+		"tftpboot $fdt_addr $fdt_name;\0"	\
+	"get_images_usb=usb reset;fatload usb 0 $kernel_addr $image_name; "		\
+		"fatload usb 0 $fdt_addr $fdt_name;\0"	\
+	"set_bootargs=run get_bootdev;setenv bootargs $console $bootdev\0"	\
+	"bootcmd_tftp=run get_images_tftp; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"bootcmd_mmc=run get_images_mmc; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"bootcmd_usb=run get_images_usb; run set_bootargs; "		\
+		"booti $kernel_addr - $fdt_addr\0"	\
+	"kernel_addr=0x7000000\0"		\
+	"initrd_addr=0xa00000\0"		\
+	"initrd_size=0x2000000\0"		\
+	"fdt_addr=0x6f00000\0"		\
+	"loadaddr=0x7000000\0"			\
+	"fdt_high=0xffffffffffffffff\0"		\
+	"netdev=eth0\0"				\
+	"ethaddr=00:51:82:11:22:00\0"		\
+	"console=" CONFIG_DEFAULT_CONSOLE "\0"
+#endif
 #endif /*CONFIG_MVEBU_PALLADIUM*/
-
+#define CONFIG_BOOTCOMMAND      "run bootcmd_mmc"
 
 #endif /* _CONFIG_MVEBU_ARMADA_H */

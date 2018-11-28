@@ -352,7 +352,7 @@ int mv88e6xxx_initialize(const void *blob)
 	if (ret == 0)
 		return -EACCES;
 
-	if ((gd->board_type == NM01) || (gd->board_type == NM04))
+	if ((gd->board_type == NM01) || (gd->board_type == NM03) || (gd->board_type == NM04) || (gd->board_type == NM14))
 		switch_num = 1;
 	else if (gd->board_type == NM02)
 		switch_num = 2;
@@ -429,7 +429,7 @@ int mv88e6xxx_initialize(const void *blob)
 			mv88e6xxx_write_register(&soho_dev[i],
 						 REG_PORT(port),
 						 PORT_BASE_VLAN,
-						 soho_dev[i].port_mask & ~BIT(port));
+						 (port == soho_dev[i].cpu_port) ? soho_dev[i].port_mask : BIT(soho_dev[i].cpu_port));
 
 			if (port == soho_dev[i].cpu_port || port == soho_dev[i].sfp_port)
 				continue;
@@ -464,9 +464,13 @@ int mv88e6xxx_initialize(const void *blob)
 		s = getenv("eth_mask");
 		if(s)
 			mask_port = (int)simple_strtol(s, NULL, 16);
-		else 
-			mask_port = 0x3FE;
-		
+		else{
+			#if defined(CONFIG_NMXX_ALI)
+				mask_port = 0x3FF;
+			#else
+				mask_port = 0x3FE;
+			#endif
+		}
 		mask_port >>= i * 5;
 		/* Turn on phy power for mv6176 */
 		if(((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6172) || ((soho_dev[i].id >> 4) == PORT_SWITCH_ID_PROD_NUM_6176)) {
@@ -527,8 +531,8 @@ static int sw_resolve_options(char *str)
 		return SW_DEV;
 	else if (strcmp(str, "link") == 0)
 		return SW_LINK;
-	else if (strcmp(str, "force") == 0)
-		return SW_FORCE;
+	else if (strcmp(str, "enable") == 0)
+		return SW_ENABLE;
 	else
 		return SW_NA;
 }
@@ -557,12 +561,30 @@ static int do_sw(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
 		else
 			printf("Param Error: id = 0 or 1\n");
 		break;
-	case SW_FORCE:
-		if (argc != 2) {
-			printf("Syntax Error: switch force\n");
+	case SW_ENABLE:
+		if (argc != 3) {
+			printf("Syntax Error: switch enable <[0-4]>\n");
 			return 1;
 		}
 		
+		port = (int)simple_strtoul(argv[2], NULL, 16);
+		if (port < 0 || port > 4) {
+			printf("Syntax Error: switch enable <[0-4]>\n");
+			return 1;
+		}
+		ret = mv88e6xxx_read_phy_register(dev, port, 0, 0);
+		if (ret < 0){
+			printf("Failed: Read - switch port: 0x%X, page: 0x0, reg: 0x0, ret: %d\n", port, ret);
+			break;
+		}
+		ret &= ~PHY_COPPER_CONTROL_POWER_DOWN;
+		val = ret;
+		ret = mv88e6xxx_write_phy_register(dev, port, 0, 0,(unsigned short)val);
+		if (ret < 0){
+			printf("Failed: Write - switch port: 0x%X, page: 0x0, reg: 0x0, val: 0x%X, ret: %d\n", port, val, ret);
+			break;
+		}
+		break;
 
 	case SW_INFO:
 		mv88e6xxx_display_switch_info(dev);
@@ -663,7 +685,7 @@ U_BOOT_CMD(
 	switch,	7,	1,	do_sw,
 	"Switch Access commands",
 	"dev <id> - switch switch dev\n"
-	"force - enable all phy and sfp\n"
+	"enable <[0-4]> - enable all phy and sfp\n"
 	"switch info - Display switch information\n"
 	"switch read <port> <reg> - read switch register <reg> of a <port>\n"
 	"switch write <port> <reg> <val> - write <val> to switch register <reg> of a <port>\n"

@@ -74,6 +74,7 @@ extern int prom_init(void);
 #endif
 
 extern int nmxx_board_init(void);
+extern int recovery_ops(void);
 
 ulong monitor_flash_len;
 
@@ -959,6 +960,7 @@ static init_fnc_t init_sequence_r[] = {
 #if defined(CONFIG_SPARC)
 	prom_init,
 #endif
+	recovery_ops,
 	run_main_loop,
 };
 

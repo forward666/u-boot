@@ -235,6 +235,9 @@ static int get_board_type(void)
 		case 3:
 			gd->board_type = NM04;
 			break;
+		case 5:
+			gd->board_type = NM14;
+			break;
 		case 7:
 			gd->board_type = NM05;
 			break;
@@ -254,7 +257,7 @@ static int gpio_reset_switch(void)
 	unsigned int gpio;
 	int ret;
 	
-	if (gd->board_type == NM01 || gd->board_type == NM02 || gd->board_type == NM04) {
+	if (gd->board_type == NM01 || gd->board_type == NM02 || gd->board_type == NM03 || gd->board_type == NM04 || gd->board_type == NM14) {
 		ret = gpio_lookup_name(PHY0_RESET_GPIO, NULL, NULL, &gpio);
 		if (ret) {
 			printf("GPIO: '%s' not found\n", PHY0_RESET_GPIO);
@@ -307,6 +310,42 @@ static int gpio_reset_switch(void)
 			gpio_direction_output(gpio, 1);
 			mdelay(10);
 			gpio_set_value(gpio, 0);
+	}else if (gd->board_type == NM03) {
+			ret = gpio_lookup_name(BP1_CTL, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", BP1_CTL);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "bp1_ctl");
+			gpio_direction_output(gpio, 1);
+
+			ret = gpio_lookup_name(BP2_CTL, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", BP2_CTL);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "bp2_ctl");
+			gpio_direction_output(gpio, 1);	
+
+			ret = gpio_lookup_name(PW1_CTL, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", PW1_CTL);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "pw1_ctl");
+			gpio_direction_input(gpio);
+
+			ret = gpio_lookup_name(PW2_CTL, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", PW2_CTL);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "pw2_ctl");
+			gpio_direction_input(gpio);
 	}
 
 	return 0;
@@ -317,37 +356,66 @@ static int init_sys_led(void)
 	int ret;
 	unsigned int gpio;
 	
-	if (gd->board_type == NM01 || gd->board_type == NM02) {
-		ret = gpio_lookup_name(SYS_LED, NULL, NULL, &gpio);
+	if (gd->board_type == NM01 || gd->board_type == NM02 || gd->board_type == NM03) {
+		ret = gpio_lookup_name(PWM1_LED, NULL, NULL, &gpio);
 		if (ret) {
-			printf("GPIO: '%s' not found\n", SYS_LED);
+			printf("GPIO: '%s' not found\n", PWM1_LED);
 			return 0;
 		}
 		gpio_free(gpio);
 		gpio_request(gpio, "sys_led");
 		gpio_direction_output(gpio, 0);
-	}else if (gd->board_type == NM04) {
-		ret = gpio_lookup_name(WLED, NULL, NULL, &gpio);
+		
+		if (gd->board_type == NM03) {
+			ret = gpio_lookup_name(BP2_LED, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", BP2_LED);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "bp2_led");
+			gpio_direction_output(gpio, 0);
+			
+			ret = gpio_lookup_name(BP1_LED, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", BP1_LED);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "bp1_led");
+			gpio_direction_output(gpio, 0);
+
+			ret = gpio_lookup_name(ALM_LED, NULL, NULL, &gpio);
+			if (ret) {
+				printf("GPIO: '%s' not found\n", ALM_LED);
+				return 0;
+			}
+			gpio_free(gpio);
+			gpio_request(gpio, "alm_led");
+			gpio_direction_output(gpio, 1);
+		}
+	} else if (gd->board_type == NM04 || gd->board_type == NM14) {
+		ret = gpio_lookup_name(PWM0_LED, NULL, NULL, &gpio);
 		if (ret) {
-			printf("GPIO: '%s' not found\n", WLED);
+			printf("GPIO: '%s' not found\n", PWM0_LED);
 			return 0;
 		}
 		gpio_free(gpio);
-		gpio_request(gpio, "lte_led");
+		gpio_request(gpio, "lte_ctl");
 		gpio_direction_output(gpio, 0);
 
-		ret = gpio_lookup_name(SYS_LED, NULL, NULL, &gpio);
+		ret = gpio_lookup_name(PWM1_LED, NULL, NULL, &gpio);
 		if (ret) {
-			printf("GPIO: '%s' not found\n", SYS_LED);
+			printf("GPIO: '%s' not found\n", PWM1_LED);
 			return 0;
 		}
 		gpio_free(gpio);
 		gpio_request(gpio, "alarm_led");
-		gpio_direction_output(gpio, 0);
+		gpio_direction_output(gpio, 1);
 
-		ret = gpio_lookup_name(LTE_LED, NULL, NULL, &gpio);
+		ret = gpio_lookup_name(PWM2_LED, NULL, NULL, &gpio);
 		if (ret) {
-			printf("GPIO: '%s' not found\n", LTE_LED);
+			printf("GPIO: '%s' not found\n", PWM2_LED);
 			return 0;
 		}
 		gpio_free(gpio);
@@ -361,8 +429,9 @@ static int init_sys_led(void)
 		}
 		gpio_free(gpio);
 		gpio_request(gpio, "lte_led");
-		gpio_direction_output(gpio, 0);
+		gpio_direction_output(gpio, 1);
 	}
+
 	return 0;
 }
 
@@ -371,7 +440,7 @@ static int init_other(void)
 	int ret;
 	unsigned int gpio;
 
-	if (gd->board_type == NM04)
+	if (gd->board_type == NM04 || gd->board_type == NM14)
 	{
 		ret = gpio_lookup_name(LTE_POWER_CTL, NULL, NULL, &gpio);
 		if (ret) {
@@ -402,22 +471,33 @@ static int init_other(void)
 		gpio_request(gpio, "usb_power_ctl");
 		gpio_direction_output(gpio, 1);
 	}
-
-	/* init HSC32EU hardware reset gpio status as output and default value is 1 */
-	ret = gpio_lookup_name(HSC_RESET, NULL, NULL, &gpio);
-	if (ret) {
-		printf("GPIO: '%s' not found\n", HSC_RESET);
-		return 0;
+	
+	if (gd->board_type != NM03) {
+		/* init HSC32EU hardware reset gpio status as output and default value is 1 */
+		ret = gpio_lookup_name(HSC_RESET, NULL, NULL, &gpio);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", HSC_RESET);
+			return 0;
+		}
+		gpio_free(gpio);
+		gpio_request(gpio, "hsc_reset");
+		gpio_direction_output(gpio, 0);
+		mdelay(20);
+		gpio_set_value(gpio, 1);
 	}
-	gpio_free(gpio);
-	gpio_request(gpio, "hsc_reset");
-	gpio_direction_output(gpio, 0);
-	mdelay(20);
-	gpio_set_value(gpio, 1);
-
 	return 0;
 }
 
+static int log_out(int enable)
+{
+#ifdef CONFIG_SILENT_CONSOLE
+	if (enable)
+		gd->flags &= ~GD_FLG_SILENT;
+	else
+		gd->flags |= GD_FLG_SILENT;
+#endif
+	return 0;
+}
 
 int nmxx_board_init(void)
 {
@@ -426,6 +506,138 @@ int nmxx_board_init(void)
 	init_sys_led();
 	init_other();
 
+	return 0;
+}
+
+#define check_all_time 	4000
+#define check_one_time 	200
+#define CMD_LEN			256
+
+int recovery_ops(void)
+{
+	int count = 0, flag = 0, ret, i;
+	unsigned int gpio, gpio12, gpio14;
+	char cmd[CMD_LEN] = {0};
+	char *s;
+	long value = 0;
+	ulong all_ram_size = 0;
+
+	#if defined(CONFIG_NMXX_ALI)
+	ret = gpio_lookup_name(KEY_RESET, NULL, NULL, &gpio);
+	if (ret) {
+		printf("GPIO: '%s' not found\n", KEY_RESET);
+		return 0;
+	}
+	gpio_free(gpio);
+	gpio_request(gpio, "reset_key");
+	gpio_direction_input(gpio);
+	
+	while (1) {
+		if (gpio_get_value(gpio))
+			break;
+		else {
+			mdelay(check_one_time);
+			count++;
+		}
+		if (count > (check_all_time / check_one_time)) {
+			flag = 1;
+			break;
+		}	
+	}
+	if (1 == flag) {
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "mmc dev 1");
+		run_command_list(cmd, -1, 0);
+
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "setenv loadaddr 0x7000000");
+		run_command_list(cmd, -1, 0);
+		
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "part start mmc 1 3 pstart1");
+		run_command_list(cmd, -1, 0);
+
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "part size mmc 1 3 psize1");
+		run_command_list(cmd, -1, 0);
+
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "part start mmc 1 1 pstart2");
+		run_command_list(cmd, -1, 0);
+
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "part size mmc 1 1 psize2");
+		run_command_list(cmd, -1, 0);
+
+		s = getenv("pstart1");
+		if (NULL == s) {
+			printf("Can't getting information for partition 3\n");
+			goto error;
+		}
+		s = getenv("pstart2");
+		if (NULL == s) {
+			printf("Can't getting information for partition 1\n");
+			goto error;
+		}
+		
+		for (i = 0; i < CONFIG_NR_DRAM_BANKS; ++i) {
+			if (gd->bd->bi_dram[i].size)
+				all_ram_size += gd->bd->bi_dram[i].size;
+		}
+		if (all_ram_size == 0)
+			all_ram_size = 0x20000000;
+		value = simple_strtol(getenv("psize1"), NULL, 16);
+		if (value > (all_ram_size - simple_strtol(getenv("loadaddr"), NULL, 16) - 0x100000)){
+			printf("The recovery partition is too big\n");
+			goto error;	
+		}
+		
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "fstype mmc 1:3 type_fs");
+		run_command_list(cmd, -1, 0);
+		s = getenv("type_fs");
+		if ((NULL == s) || (strcmp(s, "ext4"))) {
+			printf("Recovery filesystem type isn't ext4\n");
+			goto error;
+		}
+
+		printf("\n======> Start recovering system partition......\n");
+		
+		ret = gpio_lookup_name(PWM1_LED, NULL, NULL, &gpio12);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", PWM1_LED);
+			return 0;
+		}
+		gpio_direction_output(gpio12, 0);
+		ret = gpio_lookup_name(PWM3_LED, NULL, NULL, &gpio14);
+		if (ret) {
+			printf("GPIO: '%s' not found\n", PWM3_LED);
+			return 0;
+		}
+		gpio_direction_output(gpio14, 0);
+		log_out(0);
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "mmc read ${loadaddr} ${pstart1} ${psize1}");
+		run_command_list(cmd, -1, 0);
+
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "mmc erase ${pstart2} ${psize2}");
+		run_command_list(cmd, -1, 0);
+
+		memset(cmd, 0, CMD_LEN);
+		sprintf(cmd, "mmc write ${loadaddr} ${pstart2} ${psize1}");
+		run_command_list(cmd, -1, 0);
+
+		gpio_direction_output(gpio12, 1);
+		gpio_direction_output(gpio14, 1);
+		log_out(1);
+		printf("\n======> End recovering system partition,result OK\n\n");
+	}
+	#endif
+
+	return 0;
+error:
+	log_out(1);
 	return 0;
 }
 

@@ -225,6 +225,9 @@ static int __abortboot(int bootdelay)
 	if (tstc()) {	/* we got a key press	*/
 		(void) getc();  /* consume input	*/
 		puts("\b\b\b 0");
+		#if defined (CONFIG_NMXX_ALI)
+			run_command_list("switch enable 0", -1, 0);
+		#endif
 		abort = 1;	/* don't auto boot	*/
 	}
 
@@ -241,6 +244,9 @@ static int __abortboot(int bootdelay)
 # else
 				(void) getc();  /* consume input	*/
 # endif
+				#if defined (CONFIG_NMXX_ALI)
+					run_command_list("switch enable 0", -1, 0);
+				#endif
 				break;
 			}
 			udelay(10000);

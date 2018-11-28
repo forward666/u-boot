@@ -52,5 +52,7 @@
 #define CONFIG_BOARD_TYPES
 #define CONFIG_FAT_WRITE
 #define CONFIG_CMD_DATE
-
+#if defined (CONFIG_NMXX_SXF)
+#define CONFIG_MENU_SHOW
+#endif
 #endif /* _CONFIG_MVEBU_ARMADA_37XX_H */

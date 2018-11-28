@@ -15,10 +15,11 @@
 #include <dt-bindings/gpio/gpio.h>
 
 #define MMC_RESET           	"GPIO110"
-#define WLED           			"GPIO111"
-#define SYS_LED        			"GPIO112"
-#define LTE_LED        			"GPIO113"
+#define PWM0_LED           		"GPIO111"
+#define PWM1_LED        		"GPIO112"
+#define PWM2_LED        		"GPIO113"
 #define PWM3_LED       			"GPIO114"
+
 #define LTE_RESET       		"GPIO117"
 #define KEY_RESET 	   			"GPIO120"
 #define VERCTL_0      			"GPIO121"
@@ -35,5 +36,14 @@
 
 #define I2C_IO_EXP_NUM4			"gpio@21_4"
 #define I2C_IO_EXP_NUM5			"gpio@21_5"
+
+#define BP2_LED           		"GPIO111"
+#define ALM_LED        			"GPIO113"
+#define BP1_LED       			"GPIO114"
+#define BP1_CTL       			"GPIO21"
+#define BP2_CTL       			"GPIO22"
+#define PW1_CTL       			"GPIO24"
+#define PW2_CTL       			"GPIO25"
+
 
 #endif

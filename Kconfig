@@ -308,6 +308,28 @@ config ARCH_FIXUP_FDT_MEMORY
 
 endmenu		# Boot images
 
+menu "X-Speed Board Type Select"
+
+config NMXX_SXF
+	bool "Select sxf configuration"
+	default n
+	help
+	  Config NMXX Board
+
+config NMXX_ALI
+	bool "Select ali configuration"
+	default n
+	help
+	  Config NMXX Board
+
+config NMXX_DP
+        bool "Select dp  configuration"
+        default n
+        help
+          Config NMXX Board
+
+endmenu
+
 source "api/Kconfig"
 
 source "common/Kconfig"

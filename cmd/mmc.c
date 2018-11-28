@@ -307,7 +307,13 @@ static int do_mmc_write(cmd_tbl_t *cmdtp, int flag,
 
 	addr = (void *)simple_strtoul(argv[1], NULL, 16);
 	blk = simple_strtoul(argv[2], NULL, 16);
-	cnt = simple_strtoul(argv[3], NULL, 16);
+	#if defined (CONFIG_NMXX_SXF)
+		cnt = simple_strtoul(argv[3], NULL, 16) / 512;
+		if (simple_strtoul(argv[3], NULL, 16) % 512)
+			cnt += 1;
+	#else
+		cnt = simple_strtoul(argv[3], NULL, 16);
+	#endif
 
 	mmc = init_mmc_device(curr_device, false);
 	if (!mmc)
